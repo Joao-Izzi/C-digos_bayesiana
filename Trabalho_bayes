@@ -1,0 +1,269 @@
+################################################################################
+###################### ARQUIVO R - TRABALHO BAYESIANA ##########################
+################################################################################
+
+
+# Chamando as bibliotecas necessárias
+library(ggplot2) # gráficos 
+library(reshape) # melt
+#library(StanHeaders)
+#library(rstan)
+
+
+################################################################################
+######################## ARRUMANDO BANCO DE DADOS ##############################
+################################################################################
+
+# Importando o banco de dados
+Admission = c(6.4, 7.1, 6.5, 8.6, 8.1, 10.4, 11.5, 13.8, 15.4, 15.7, 11.7,
+              15.8, 5, 13, 14, 12, 6, 9, 13, 16, 25, 14, 14, 20, 5.8, 9.2,
+              7.9, 7.7, 11, 12.9, 13.5, 13.1, 15.8, 13.3, 12.8, 14.5)
+
+Moon = factor(rep(c("Before", "During", "After"), each = 12), levels = c("Before", "During", "After"))
+
+Month = factor(rep(c("Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", 
+                     "Mar", "Apr", "May", "Jun", "Jul"), times = 3),
+               levels = c("Aug", "Sep", "Oct", "Nov", "Dec", "Jan", 
+                          "Feb", "Mar", "Apr", "May", "Jun", "Jul"))
+
+dados = data.frame(Admission, Moon, Month)
+
+
+# Criando o gráfico com ggplot2
+ggplot(dados, aes(x = Admission, fill = Moon)) +
+  geom_density(binwidth = 2, position = "identity", alpha = 0.3) +
+  labs(title = "Densidade das Admissões por Período da Lua",
+       x = "Admissões",
+       y = "Frequência") +
+  scale_fill_manual(values = c("Before" = "red", "During" = "green", "After" = "blue")) +
+  theme_minimal()
+
+################################################################################
+############### ANÁLISE DESCRITIVA E EXPLORATÓRIA DE DADOS #####################
+################################################################################
+# analise descritiva boxplot de idade, histograma das fases da lua e medidas resumo da variavel resposta em função das outras e só dela.
+# Tabela de dupla entrada Fases da Lua e Meses do Ano
+table(dados$Moon, dados$Month)
+'Notamos que temos apenas 1 observação de taxa de internação para 
+cada interação entre meses do ano e fases da lua. Dessa forma, não é 
+possível realizar uma anova com interação.'
+
+
+# Medidas resumo Taxas de internação
+summary(Admission)
+var(Admission)
+
+
+# Curva de Densidade da Taxa de internação
+ggplot(dados, aes(x = Admission)) + 
+  geom_density(alpha = 0.3, fill = "orange") +
+  xlab(label = "") +
+  ylab(label = "Densidade")
+
+summary(Admission)
+
+#lua
+summary(Admission[1:12]) #befoer
+summary(Admission[13:24]) #during
+summary(Admission[25:36]) #after
+summary(Admission)
+for (i in 1:12){
+  print(summary(Admission[c(i,i+12,i+24)]))
+}
+
+# Plotando algumas densidades de distribuições conhecidas junto da densidade da 
+#taxa de internação
+set.seed(101)
+norm_for = data.frame(norm1 = rnorm(1:36, 15, 25),
+                       norm2 = rnorm(1:36, 200, 100), 
+                       admission = Admission)
+
+norm_forma = melt(norm_for)
+
+ggplot(norm_forma, aes(x = value, fill = variable)) +
+  geom_density(alpha = 0.30) + 
+  xlab(label = "x") + 
+  ylab(label = "Densidade") +
+  scale_fill_discrete(name = "Distribuições", labels = c("Normal(15, 25)", "Normal(200, 100)", "Admission"))
+
+'Estou tentando buscar com essa ADED informações a respeito dos meus dados
+(verossimilhança) para definir melhor a minha priori, mas ACHO isso errado
+pq a informação a priori deve vir de conhecimentos a priori que eu tenho sobre 
+a situação e não sobre as infos que aprendi com os dados.'
+
+
+# Box plot das Taxas de internação 
+ggplot(dados, aes(x = Admission))+
+  geom_boxplot(fill = "lightpink", alpha = 0.6) +
+  ylim(-0.7, 0.7) +
+  coord_flip() +
+  labs(x = "Pacientes/Dia", y = "Taxas de internação em uma clínica de saúde mental da Virgínia")+
+  # move the title text to the middle
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_blank())
+
+
+# Box plot da Taxa de Internação vs Fases da Lua
+ggplot(dados, aes(x = Moon, y = Admission)) +
+  geom_boxplot(width = 0.5, col = "black", fill = c("lightpink", "lightgreen", "lightblue"), horizontal = FALSE)+ # boxplot
+  labs(x = "Fases da lua cheia", y = "Taxas de internação") + ggtitle("Taxa de Internação por fase da lua")
+
+
+# Box plot da Taxa de Internação vs Meses do Ano
+ggplot(dados, aes(x = Month, y = Admission)) +
+  geom_boxplot(width = 0.5, col = "black", 
+               fill = c("#FFFF00", "#FFD600", "#FFAD00", "#FF6900", "#FF1E00", "#E50841", "#B917AE", "#821AF2", "#3A0BF9", "#0017E7", "#008B73", "#00FF00"))+ # boxplot
+  labs(x = "Meses do ano", y = "Taxa de internação") + ggtitle("Taxa de internação por meses do ano")
+
+
+
+################################################################################
+########################## INFERÊNCIA FREQUENTISTA #############################
+################################################################################
+
+# Modelo com interação
+#model_freq_com_int = aov(Admission ~ Month*Moon)
+#summary(model_freq_com_int)
+#anova(model_freq_com_int)
+'Não dá certo, visto que temos uma única observação para cada interação 
+mês e fase da lua'
+
+# Modelo sem interação
+model_freq_sem_int = aov(Admission ~ Month + Moon)
+summary(model_freq_sem_int)
+anova(model_freq_sem_int)
+coef(model_freq_sem_int)
+
+qqnorm(model_freq_sem_int$residuals)
+qqline(model_freq_sem_int$residuals, col = "steelblue", lwd = 2)
+
+# Comparações Múltiplas 
+(compar_lua = TukeyHSD(x = model_freq_sem_int, conf.level = 0.95)$Moon)
+(compar_mes = TukeyHSD(x = model_freq_sem_int, conf.level = 0.95)$Month)
+
+
+
+################################################################################
+########################### INFERÊNCIA BAYESIANA ###############################
+################################################################################
+
+# Arrumando os dados para serem utilizados no stan
+require(stan)
+
+X = model.matrix(Admission ~ Moon + Month)
+n = nrow(X)
+p = ncol(X)
+
+# Chamando o arquivo stan
+anova_two_way_stan = 
+  "
+  data{
+       int n;
+       int p;
+       vector[n] Admission;
+       matrix[n, p] X;
+      }
+  
+  parameters
+  {
+    vector[p] beta;
+    real <lower = 0> sigma;
+  }
+  
+  transformed parameters
+  {
+    vector[n] mu;
+    mu = X * beta;
+  }
+
+  model{
+        Admission ~ normal(mu, sigma);
+        beta ~ normal(15, 5);
+        
+       }
+"
+
+#\\sigma ~ \\gamma(0.1, 0.001); \\colocamos a priori do stan
+data_list = list(Admission = Admission, n = n, p = p, X = X)
+
+cadeias = stan(data = data_list, 
+                model_code = anova_two_way_stan, 
+                chains = 4,
+                iter = 10000, 
+                warmup = 2000, 
+                thin = 10)
+
+
+# Avaliando a qualidade do ajuste da posteriori 
+
+# Convergencia para a posteriori 
+trace1 = traceplot(cadeias, 
+                  pars = c("beta[1]", "beta[2]", "beta[3]", "beta[4]", "beta[5]", "beta[6]",
+                           "beta[7]", "beta[8]", "beta[9]", "beta[10]", "beta[11]", "beta[12]",
+                           "beta[13]", "beta[14]", "sigma"),
+                  inc_warmup = TRUE)
+trace1
+trace1 + scale_color_discrete() + theme(legend.position = "top")
+
+trace2 = traceplot(cadeias, 
+                  pars = c("beta[1]", "beta[2]", "beta[3]", "beta[4]", "beta[5]", "beta[6]",
+                           "beta[7]", "beta[8]", "beta[9]", "beta[10]", "beta[11]", "beta[12]",
+                           "beta[13]", "beta[14]", "sigma"),
+                  inc_warmup = FALSE)
+trace2
+
+trace2 + scale_color_discrete() + theme(legend.position = "top")
+
+# Outra forma de sumarizar os dados 
+betas_sigma_amostras = as.matrix(cadeias)[, 1:15]
+resultados_betas_sigma = matrix(nrow = 15, ncol = 6)
+resultados_betas_sigma[, 1] = round(colMeans(betas_sigma_amostras), 2)
+resultados_betas_sigma[, 2] = round(apply(betas_sigma_amostras, 2, sd), 2)
+resultados_betas_sigma[, 3:4] = round(apply(betas_sigma_amostras, 2, quantile, probs = c(0.025, 0.975)), 2)
+resultados_betas_sigma[, 5] = round(apply(betas_sigma_amostras, 2, ess_bulk), 2)
+resultados_betas_sigma[, 6] = round(apply(betas_sigma_amostras, 2, Rhat), 2)
+colnames(resultados_betas_sigma) = c("Média", "Desvio padrão", "2.5%", "97.5%", "n_eff", "Rhat")
+rownames(resultados_betas_sigma) = colnames(betas_sigma_amostras)
+
+nomes = c(expression(mu), expression(hat(alpha[Dur])), expression(hat(alpha[Aft])), 
+          expression(hat(gamma[Sep])), expression(hat(gamma[Out])), expression(hat(gamma[Nov])),
+          expression(hat(gamma[Dec])), expression(hat(gamma[Jan])), expression(hat(gamma[Feb])),
+          expression(hat(gamma[Mar])), expression(hat(gamma[Apr])), expression(hat(gamma[May])),
+          expression(hat(gamma[Jun])), expression(hat(gamma[Jul])), expression(hat(sigma)))
+
+
+
+# Avaliando a convergencia dos valores gerados para a posteriori 
+layout(matrix(c(1:7, 8:14, 0, 0, 0, 15, 0, 0, 0), nrow = 3, ncol = 7,  byrow = T))
+
+for(i in 1:ncol(betas_sigma_amostras))
+{
+  plot(betas_sigma_amostras[, i], xlab = "Amostras", type = "l", ylab = nomes[i])
+}  
+
+# Avaliando a independencia dos valores gerados como provenientes da posteriori 
+layout(matrix(c(1:7, 8:14, 0, 0, 0, 15, 0, 0, 0), nrow = 3, ncol = 7, byrow = T))
+
+par(mar = c(4,4,4,4))
+
+for(i in 1:(ncol(betas_sigma_amostras)-1))
+{
+  acf(betas_sigma_amostras[, i])
+}
+
+
+# Avaliando os valores da posteriori 
+plot(cadeias, show_density = TRUE, 
+     ci_level = 0.95, 
+     fill_color = "purple")
+
+plot(cadeias, 
+     pars = c("beta[1]", "beta[2]", "beta[3]", "beta[4]", "beta[5]", "beta[6]",
+              "beta[7]", "beta[8]", "beta[9]", "beta[10]", "beta[11]", "beta[12]",
+              "beta[13]", "beta[14]","sigma"),
+     show_density = TRUE, 
+     outer_level = 1, 
+     fill_color = "purple")
+
+cadeias
+
